@@ -58,6 +58,7 @@ export default function Login({ onLogin }) {
   if (view === 'login') return (
     <div style={{ maxWidth: 360, margin: '3rem auto', padding: '0 1rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <img src="/logo.svg" alt="EduCheck" style={{ width: 72, height: 72, marginBottom: 12 }} />
         <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>EduCheck</div>
         <div style={{ fontSize: 14, color: '#5E5E5E' }}>Connectez-vous pour continuer</div>
       </div>
@@ -79,13 +80,15 @@ export default function Login({ onLogin }) {
             Mot de passe oublié ?
           </button>
         </div>
-       </Card>
+
+      </Card>
     </div>
   )
 
   if (view === 'forgot') return (
     <div style={{ maxWidth: 360, margin: '3rem auto', padding: '0 1rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <img src="/logo.svg" alt="EduCheck" style={{ width: 72, height: 72, marginBottom: 12 }} />
         <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>EduCheck</div>
         <div style={{ fontSize: 14, color: '#5E5E5E' }}>Réinitialiser mon mot de passe</div>
       </div>
@@ -114,6 +117,7 @@ export default function Login({ onLogin }) {
   return (
     <div style={{ maxWidth: 360, margin: '3rem auto', padding: '0 1rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <img src="/logo.svg" alt="EduCheck" style={{ width: 72, height: 72, marginBottom: 12 }} />
         <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>EduCheck</div>
       </div>
       <Card style={{ textAlign: 'center' }}>
