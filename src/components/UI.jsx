@@ -176,6 +176,8 @@ export function TopBar({ user, onLogout }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '1rem', borderBottom: '0.5px solid #E0E0E0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <img src="/logo.svg" alt="EduCheck" style={{ width: 32, height: 32, borderRadius: 8 }} />
+        <div style={{ width: '0.5px', height: 32, background: '#E0E0E0', margin: '0 4px' }} />
         <Avatar name={user.name} role={user.role} />
         <div>
           <div style={{ fontSize: 14, fontWeight: 500 }}>{user.name}</div>
