@@ -46,6 +46,7 @@ export default function ResetPassword({ onDone }) {
   const wrap = children => (
     <div style={{ maxWidth: 400, margin: '3rem auto', padding: '0 1rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+        <img src="/logo.svg" alt="EduCheck" style={{ width: 72, height: 72, marginBottom: 12 }} />
         <div style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>EduCheck</div>
       </div>
       <Card>{children}</Card>
