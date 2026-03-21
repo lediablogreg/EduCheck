@@ -79,14 +79,7 @@ export default function Login({ onLogin }) {
             Mot de passe oublié ?
           </button>
         </div>
-        <Divider />
-        <div style={{ fontSize: 12, color: '#9E9E9E', lineHeight: 2 }}>
-          <strong style={{ color: '#5E5E5E' }}>Comptes de démo</strong><br />
-          Admin : <code>admin</code> / <code>admin123</code><br />
-          Agent : <code>agent1</code> / <code>agent123</code><br />
-          Élèves : <code>eleve1</code>/<code>lea123</code> · <code>eleve2</code>/<code>tom123</code>
-        </div>
-      </Card>
+       </Card>
     </div>
   )
 
