@@ -208,7 +208,9 @@ function EditUserModal({ userId, onClose, onSaved }) {
     if (idx < 0) return
     if (name) all[idx].name = name
     if (pw) all[idx].password = pw
-    if (u?.role === 'eleve') { all[idx].agentId = agentId; all[idx].email = email; all[idx].phone = phone }
+    all[idx].email = email
+    all[idx].phone = phone
+    if (u?.role === 'eleve') all[idx].agentId = agentId
     saveUsers(all); onSaved()
   }
   return (
@@ -218,6 +220,12 @@ function EditUserModal({ userId, onClose, onSaved }) {
       <Field label={<span>Nouveau mot de passe <span style={{ fontWeight: 400, color: '#9E9E9E' }}>(vide = inchangé)</span></span>}>
         <Input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" />
       </Field>
+      <Field label="Email (pour réinitialisation du mot de passe)">
+        <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="exemple@email.com" />
+      </Field>
+      <Field label="Téléphone (pour SMS)">
+        <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+32470000000" />
+      </Field>
       {u?.role === 'eleve' && <>
         <Field label="Agent référent">
           <Select value={agentId} onChange={e => setAgentId(e.target.value)}>
@@ -225,8 +233,6 @@ function EditUserModal({ userId, onClose, onSaved }) {
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
         </Field>
-        <Field label="Email"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} /></Field>
-        <Field label="Téléphone"><Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
       </>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Annuler</Btn>
