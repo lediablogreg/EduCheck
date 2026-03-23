@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { getUsers, saveUsers, getSessions, getResponses, getNotifs, uid, initials, fmt } from '../storage'
-import { Card, TopBar, Tabs, Btn, Badge, Avatar, Field, Input, Select, Alert, Modal, MetricCard, SectionTitle, SearchInput, Table, Divider } from './UI'
+import emailjs from '@emailjs/browser'
+import { getUsers, saveUsers, getSessions, getResponses, getNotifs, getEjsConfig, uid, initials, fmt } from '../storage'
+import { Card, TopBar, Tabs, Btn, Badge, Avatar, Field, Input, Select, Alert, Modal, MetricCard, SectionTitle, SearchInput, Table, Divider, Textarea } from './UI'
 
 export default function AdminView({ user, onLogout }) {
   const [tab, setTab] = useState('comptes')
@@ -38,6 +39,8 @@ export default function AdminView({ user, onLogout }) {
       <Badge variant={roleBadge[u.role]}>{roleLabel[u.role]}</Badge>,
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Btn sm onClick={() => setModal({ type: 'edit', userId: u.id })}>Modifier</Btn>
+        {u.email && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'email' })} title={`Email à ${u.name}`}>✉</Btn>}
+        {u.phone && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'sms' })} title={`SMS à ${u.name}`}>📱</Btn>}
         {u.id !== 'admin' && <Btn sm variant="danger" onClick={() => setModal({ type: 'delete', userId: u.id })}>Suppr.</Btn>}
       </div>
     ])
@@ -115,6 +118,7 @@ export default function AdminView({ user, onLogout }) {
 
   function renderModal() {
     if (!modal) return null
+    if (modal.type === 'send_message') return <SendMessageModal user={modal.user} defaultChannel={modal.channel} onClose={closeModal} />
     if (modal.type === 'create') return <CreateUserModal role={modal.role} onClose={closeModal} onCreated={() => { rerender(); closeModal() }} />
     if (modal.type === 'edit') return <EditUserModal userId={modal.userId} onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
     if (modal.type === 'delete') {
@@ -237,6 +241,95 @@ function EditUserModal({ userId, onClose, onSaved }) {
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Annuler</Btn>
         <Btn variant="primary" onClick={save}>Enregistrer</Btn>
+      </div>
+    </Modal>
+  )
+}
+
+function SendMessageModal({ user, defaultChannel, onClose }) {
+  const [channel, setChannel] = useState(defaultChannel || 'email')
+  const [subject, setSubject] = useState('')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
+  const [status, setStatus] = useState(null) // null | success | error
+
+  async function send() {
+    if (!message.trim()) return
+    setSending(true)
+    const ejsCfg = getEjsConfig()
+
+    if (channel === 'email') {
+      if (!ejsCfg.configured) {
+        setStatus({ type: 'error', text: "EmailJS n'est pas configuré. Configure-le depuis l'interface agent → Notifications." })
+        setSending(false); return
+      }
+      try {
+        await emailjs.send(
+          ejsCfg.serviceId, ejsCfg.templateId,
+          { to_email: user.email, to_name: user.name, from_name: 'EduCheck', subject: subject || 'Message de EduCheck', message },
+          ejsCfg.publicKey
+        )
+        setStatus({ type: 'success', text: `Email envoyé à ${user.email} !` })
+      } catch {
+        setStatus({ type: 'error', text: "Erreur lors de l'envoi. Vérifie la configuration EmailJS." })
+      }
+    } else {
+      // SMS simulé
+      setStatus({ type: 'success', text: `SMS simulé envoyé à ${user.phone}. (Twilio requis pour l'envoi réel)` })
+    }
+    setSending(false)
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.5rem' }}>
+        <Avatar name={user.name} role={user.role} />
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>{user.name}</div>
+          <div style={{ fontSize: 12, color: '#9E9E9E' }}>
+            {user.email && `📧 ${user.email}`}{user.email && user.phone && ' · '}{user.phone && `📱 ${user.phone}`}
+          </div>
+        </div>
+      </div>
+
+      {status && (
+        <Alert variant={status.type === 'success' ? 'success' : 'warning'}>{status.text}</Alert>
+      )}
+
+      {!status && <>
+        <Field label="Canal">
+          <div style={{ display: 'flex', border: '0.5px solid #C0C0C0', borderRadius: 8, overflow: 'hidden', marginBottom: '1rem' }}>
+            {user.email && (
+              <button onClick={() => setChannel('email')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'email' ? '#185FA5' : 'transparent', color: channel === 'email' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>
+                📧 Email
+              </button>
+            )}
+            {user.phone && (
+              <button onClick={() => setChannel('sms')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'sms' ? '#185FA5' : 'transparent', color: channel === 'sms' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>
+                📱 SMS
+              </button>
+            )}
+          </div>
+        </Field>
+        {channel === 'email' && (
+          <Field label="Sujet">
+            <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="ex: Informations importantes" />
+          </Field>
+        )}
+        <Field label="Message">
+          <Textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Écris ton message…" />
+          {channel === 'sms' && (
+            <div style={{ fontSize: 11, color: message.length > 160 ? '#A32D2D' : '#9E9E9E', marginTop: 4, textAlign: 'right' }}>
+              {message.length} / 160 caractères
+            </div>
+          )}
+        </Field>
+        {channel === 'sms' && <Alert variant="teal">📱 Les SMS sont simulés sans backend Twilio.</Alert>}
+      </>}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <Btn onClick={onClose}>Fermer</Btn>
+        {!status && <Btn variant="primary" disabled={sending} onClick={send}>{sending ? 'Envoi…' : 'Envoyer'}</Btn>}
       </div>
     </Modal>
   )
