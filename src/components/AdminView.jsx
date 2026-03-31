@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import emailjs from '@emailjs/browser'
-import { getUsers, saveUsers, getSessions, getResponses, getNotifs, getEjsConfig, uid, initials, fmt } from '../storage'
+import { getUsers, saveUsers, getSessions, getResponses, getNotifs, getEjsConfig, getAllQuestions, saveAllQuestions, uid } from '../storage'
 import { Card, TopBar, Tabs, Btn, Badge, Avatar, Field, Input, Select, Alert, Modal, MetricCard, SectionTitle, SearchInput, Table, Divider, Textarea } from './UI'
 
 export default function AdminView({ user, onLogout }) {
@@ -8,12 +8,15 @@ export default function AdminView({ user, onLogout }) {
   const [modal, setModal] = useState(null)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState({ col: 'role', dir: 1 })
+  const [qSearch, setQSearch] = useState('')
+  const [qFilterAgent, setQFilterAgent] = useState('')
   const [, refresh] = useState(0)
   const rerender = () => refresh(n => n + 1)
   const closeModal = () => setModal(null)
 
   const TABS = [
     { key: 'comptes', label: 'Gestion des comptes' },
+    { key: 'questions', label: 'Questions' },
     { key: 'stats', label: "Vue d'ensemble" },
   ]
 
@@ -21,9 +24,13 @@ export default function AdminView({ user, onLogout }) {
   const roleBadge = { admin: 'amber', agent: 'blue', eleve: 'gray' }
   const roleLabel = { admin: 'Admin', agent: 'Agent', eleve: 'Élève' }
 
+  // ── COMPTES ──
   function renderComptes() {
     const users = getUsers()
-    let filtered = users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.id.toLowerCase().includes(search.toLowerCase()))
+    let filtered = users.filter(u =>
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
+      u.id.toLowerCase().includes(search.toLowerCase())
+    )
     filtered = [...filtered].sort((a, b) => {
       if (sort.col === 'role') return sort.dir * (roleOrder[a.role] - roleOrder[b.role])
       return sort.dir * a.name.localeCompare(b.name)
@@ -39,8 +46,8 @@ export default function AdminView({ user, onLogout }) {
       <Badge variant={roleBadge[u.role]}>{roleLabel[u.role]}</Badge>,
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Btn sm onClick={() => setModal({ type: 'edit', userId: u.id })}>Modifier</Btn>
-        {u.email && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'email' })} title={`Email à ${u.name}`}>✉</Btn>}
-        {u.phone && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'sms' })} title={`SMS à ${u.name}`}>📱</Btn>}
+        {u.email && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'email' })}>✉ Email</Btn>}
+        {u.phone && <Btn sm onClick={() => setModal({ type: 'send_message', user: u, channel: 'sms' })}>📱 SMS</Btn>}
         {u.id !== 'admin' && <Btn sm variant="danger" onClick={() => setModal({ type: 'delete', userId: u.id })}>Suppr.</Btn>}
       </div>
     ])
@@ -71,6 +78,85 @@ export default function AdminView({ user, onLogout }) {
     )
   }
 
+  // ── QUESTIONS ──
+  function renderQuestions() {
+    const users = getUsers()
+    const agents = users.filter(u => u.role === 'agent')
+    const eleves = users.filter(u => u.role === 'eleve')
+    let allQs = getAllQuestions()
+
+    // Filtre par agent
+    if (qFilterAgent) allQs = allQs.filter(q => q.agentId === qFilterAgent)
+    // Filtre par texte
+    if (qSearch) allQs = allQs.filter(q => q.text.toLowerCase().includes(qSearch.toLowerCase()))
+
+    const cards = allQs.map(q => {
+      const agent = users.find(u => u.id === q.agentId)
+      const assigned = q.assignedTo?.length > 0
+      const names = assigned
+        ? q.assignedTo.map(id => users.find(x => x.id === id)?.name.split(' ')[0] || '?').join(', ')
+        : null
+      return (
+        <div key={q.id} style={{ background: '#F8F8F8', borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              {/* Agent propriétaire */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <Avatar name={agent?.name || '?'} role="agent" style={{ width: 22, height: 22, fontSize: 10 }} />
+                <span style={{ fontSize: 12, color: '#5E5E5E' }}>{agent?.name || 'Agent inconnu'}</span>
+              </div>
+              {/* Texte */}
+              <div style={{ fontSize: 14, marginBottom: 6, lineHeight: 1.5 }}>{q.text}</div>
+              {/* Badges */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                <Badge variant="gray">{q.type === 'oui_non' ? 'Oui / Non' : 'Réponse libre'}</Badge>
+                {q.followup && <Badge variant="blue">Suivi si {q.followup.condition}</Badge>}
+                {assigned
+                  ? <Badge variant="amber">→ {names}</Badge>
+                  : <Badge variant="green">Tous les élèves</Badge>}
+              </div>
+            </div>
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+              <Btn sm onClick={() => setModal({ type: 'edit_question', questionId: q.id })}>Modifier</Btn>
+              <Btn sm variant="danger" onClick={() => {
+                saveAllQuestions(getAllQuestions().filter(x => x.id !== q.id))
+                rerender()
+              }}>Suppr.</Btn>
+            </div>
+          </div>
+        </div>
+      )
+    })
+
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontSize: 14, color: '#5E5E5E' }}>{allQs.length} question(s)</div>
+        </div>
+
+        {/* Filtres */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div style={{ flex: 2, minWidth: 160 }}>
+            <SearchInput value={qSearch} onChange={setQSearch} placeholder="Rechercher une question…" />
+          </div>
+          <div style={{ flex: 1, minWidth: 140 }}>
+            <select value={qFilterAgent} onChange={e => setQFilterAgent(e.target.value)}
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '0.5px solid #C0C0C0', fontSize: 14, background: '#fff', color: '#1A1A1A', outline: 'none' }}>
+              <option value="">Tous les agents</option>
+              {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {cards.length === 0
+          ? <div style={{ textAlign: 'center', padding: '2rem', color: '#9E9E9E' }}>Aucune question trouvée.</div>
+          : cards}
+      </div>
+    )
+  }
+
+  // ── STATS ──
   function renderStats() {
     const users = getUsers()
     const sessions = getSessions()
@@ -100,13 +186,16 @@ export default function AdminView({ user, onLogout }) {
             const aSess = sessions.filter(s => s.agentId === a.id).length
             const aEl = users.filter(u => u.role === 'eleve' && u.agentId === a.id).length
             const aNotifs = notifs.filter(n => n.agentId === a.id).length
+            const aQs = getAllQuestions().filter(q => q.agentId === a.id).length
             return (
               <div key={a.id} style={{ padding: '12px 0', borderBottom: '0.5px solid #E0E0E0' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <Avatar name={a.name} role="agent" />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 500 }}>{a.name}</div>
-                    <div style={{ fontSize: 12, color: '#5E5E5E' }}>{aEl} élève(s) · {aSess} session(s) · {aNotifs} notif(s)</div>
+                    <div style={{ fontSize: 12, color: '#5E5E5E' }}>
+                      {aEl} élève(s) · {aSess} session(s) · {aQs} question(s) · {aNotifs} notif(s)
+                    </div>
                   </div>
                 </div>
               </div>
@@ -116,11 +205,13 @@ export default function AdminView({ user, onLogout }) {
     )
   }
 
+  // ── MODALS ──
   function renderModal() {
     if (!modal) return null
     if (modal.type === 'send_message') return <SendMessageModal user={modal.user} defaultChannel={modal.channel} onClose={closeModal} />
     if (modal.type === 'create') return <CreateUserModal role={modal.role} onClose={closeModal} onCreated={() => { rerender(); closeModal() }} />
     if (modal.type === 'edit') return <EditUserModal userId={modal.userId} onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
+    if (modal.type === 'edit_question') return <EditQuestionModal questionId={modal.questionId} onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
     if (modal.type === 'delete') {
       const u = getUsers().find(x => x.id === modal.userId)
       return (
@@ -145,6 +236,7 @@ export default function AdminView({ user, onLogout }) {
       <div style={{ marginTop: '1.5rem' }}>
         <Tabs tabs={TABS} active={tab} onChange={setTab} />
         {tab === 'comptes' && renderComptes()}
+        {tab === 'questions' && renderQuestions()}
         {tab === 'stats' && renderStats()}
       </div>
       {renderModal()}
@@ -152,6 +244,7 @@ export default function AdminView({ user, onLogout }) {
   )
 }
 
+// ── Modal : Créer utilisateur ──
 function CreateUserModal({ role, onClose, onCreated }) {
   const rl = { admin: 'Admin', agent: 'Agent', eleve: 'Élève' }[role]
   const agents = getUsers().filter(u => u.role === 'agent')
@@ -179,16 +272,16 @@ function CreateUserModal({ role, onClose, onCreated }) {
       <Field label="Nom complet *"><Input value={name} onChange={e => setName(e.target.value)} placeholder="ex: Sophie Dumont" /></Field>
       <Field label="Identifiant *"><Input value={id} onChange={e => setId(e.target.value)} placeholder="ex: sophie1" /></Field>
       <Field label="Mot de passe *"><Input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" /></Field>
-      {role === 'eleve' && <>
+      <Field label="Email"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="exemple@email.com" /></Field>
+      <Field label="Téléphone"><Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+32470000000" /></Field>
+      {role === 'eleve' && (
         <Field label="Agent référent">
           <Select value={agentId} onChange={e => setAgentId(e.target.value)}>
             <option value="">Aucun</option>
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
         </Field>
-        <Field label="Email (pour notifications)"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="eleve@example.com" /></Field>
-        <Field label="Téléphone (pour SMS)"><Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+32470000000" /></Field>
-      </>}
+      )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Annuler</Btn>
         <Btn variant="primary" onClick={create}>Créer</Btn>
@@ -197,6 +290,7 @@ function CreateUserModal({ role, onClose, onCreated }) {
   )
 }
 
+// ── Modal : Modifier utilisateur ──
 function EditUserModal({ userId, onClose, onSaved }) {
   const users = getUsers()
   const u = users.find(x => x.id === userId)
@@ -230,14 +324,14 @@ function EditUserModal({ userId, onClose, onSaved }) {
       <Field label="Téléphone (pour SMS)">
         <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+32470000000" />
       </Field>
-      {u?.role === 'eleve' && <>
+      {u?.role === 'eleve' && (
         <Field label="Agent référent">
           <Select value={agentId} onChange={e => setAgentId(e.target.value)}>
             <option value="">Aucun</option>
             {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
         </Field>
-      </>}
+      )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Annuler</Btn>
         <Btn variant="primary" onClick={save}>Enregistrer</Btn>
@@ -246,35 +340,123 @@ function EditUserModal({ userId, onClose, onSaved }) {
   )
 }
 
+// ── Modal : Modifier une question (admin) ──
+function EditQuestionModal({ questionId, onClose, onSaved }) {
+  const allQs = getAllQuestions()
+  const existing = allQs.find(q => q.id === questionId)
+  const users = getUsers()
+  const agentQs = allQs.filter(q => q.agentId === existing?.agentId && q.id !== questionId)
+  const agentEleves = users.filter(u => u.role === 'eleve' && u.agentId === existing?.agentId)
+
+  const [text, setText] = useState(existing?.text || '')
+  const [type, setType] = useState(existing?.type || 'oui_non')
+  const [fuCond, setFuCond] = useState(existing?.followup?.condition || '')
+  const [fuTarget, setFuTarget] = useState(existing?.followup?.questionId || '')
+  const [assignAll, setAssignAll] = useState(!existing?.assignedTo?.length)
+  const [assignedTo, setAssignedTo] = useState(new Set(existing?.assignedTo || []))
+
+  const toggleEleve = id => setAssignedTo(prev => {
+    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
+  })
+
+  function save() {
+    if (!text.trim()) return
+    const followup = (fuCond && fuTarget) ? { condition: fuCond, questionId: fuTarget } : null
+    const assigned = assignAll ? [] : [...assignedTo]
+    const all = getAllQuestions()
+    const idx = all.findIndex(q => q.id === questionId)
+    if (idx > -1) all[idx] = { ...all[idx], text, type, followup, assignedTo: assigned }
+    saveAllQuestions(all); onSaved()
+  }
+
+  if (!existing) return null
+
+  const agent = users.find(u => u.id === existing.agentId)
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>Modifier la question</div>
+      {agent && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: '1.5rem' }}>
+          <Avatar name={agent.name} role="agent" style={{ width: 22, height: 22, fontSize: 10 }} />
+          <span style={{ fontSize: 12, color: '#5E5E5E' }}>Agent : {agent.name}</span>
+        </div>
+      )}
+      <Field label="Texte de la question">
+        <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Écris ta question…" />
+      </Field>
+      <Field label="Type de réponse">
+        <Select value={type} onChange={e => setType(e.target.value)}>
+          <option value="oui_non">Oui / Non</option>
+          <option value="libre">Réponse libre</option>
+        </Select>
+      </Field>
+      {type === 'oui_non' && agentQs.length > 0 && (
+        <Field label="Question de suivi (optionnel)">
+          <Select value={fuCond} onChange={e => setFuCond(e.target.value)} style={{ marginBottom: 8 }}>
+            <option value="">Aucun</option>
+            <option value="oui">Si réponse = Oui</option>
+            <option value="non">Si réponse = Non</option>
+          </Select>
+          {fuCond && (
+            <Select value={fuTarget} onChange={e => setFuTarget(e.target.value)}>
+              <option value="">Choisir une question…</option>
+              {agentQs.map(q => <option key={q.id} value={q.id}>{q.text.slice(0, 50)}</option>)}
+            </Select>
+          )}
+        </Field>
+      )}
+      <Field label="Attribuer à">
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <Btn sm variant={assignAll ? 'primary' : 'default'} onClick={() => setAssignAll(true)}>Tous les élèves</Btn>
+          <Btn sm variant={!assignAll ? 'primary' : 'default'} onClick={() => setAssignAll(false)}>Spécifiques</Btn>
+        </div>
+        {!assignAll && (
+          agentEleves.length === 0
+            ? <div style={{ fontSize: 13, color: '#9E9E9E' }}>Aucun élève associé à cet agent.</div>
+            : agentEleves.map(e => (
+              <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={assignedTo.has(e.id)} onChange={() => toggleEleve(e.id)} style={{ width: 'auto' }} />
+                <Avatar name={e.name} role="eleve" style={{ width: 26, height: 26, fontSize: 11 }} />
+                <span style={{ fontSize: 14 }}>{e.name}</span>
+              </label>
+            ))
+        )}
+      </Field>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <Btn onClick={onClose}>Annuler</Btn>
+        <Btn variant="primary" onClick={save}>Enregistrer</Btn>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Modal : Envoyer message ──
 function SendMessageModal({ user, defaultChannel, onClose }) {
   const [channel, setChannel] = useState(defaultChannel || 'email')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
-  const [status, setStatus] = useState(null) // null | success | error
+  const [status, setStatus] = useState(null)
 
   async function send() {
     if (!message.trim()) return
     setSending(true)
     const ejsCfg = getEjsConfig()
-
     if (channel === 'email') {
       if (!ejsCfg.configured) {
         setStatus({ type: 'error', text: "EmailJS n'est pas configuré. Configure-le depuis l'interface agent → Notifications." })
         setSending(false); return
       }
       try {
-        await emailjs.send(
-          ejsCfg.serviceId, ejsCfg.templateId,
+        await emailjs.send(ejsCfg.serviceId, ejsCfg.templateId,
           { to_email: user.email, to_name: user.name, from_name: 'EduCheck', subject: subject || 'Message de EduCheck', message },
-          ejsCfg.publicKey
-        )
+          ejsCfg.publicKey)
         setStatus({ type: 'success', text: `Email envoyé à ${user.email} !` })
       } catch {
         setStatus({ type: 'error', text: "Erreur lors de l'envoi. Vérifie la configuration EmailJS." })
       }
     } else {
-      // SMS simulé
       setStatus({ type: 'success', text: `SMS simulé envoyé à ${user.phone}. (Twilio requis pour l'envoi réel)` })
     }
     setSending(false)
@@ -291,42 +473,21 @@ function SendMessageModal({ user, defaultChannel, onClose }) {
           </div>
         </div>
       </div>
-
-      {status && (
-        <Alert variant={status.type === 'success' ? 'success' : 'warning'}>{status.text}</Alert>
-      )}
-
+      {status && <Alert variant={status.type === 'success' ? 'success' : 'warning'}>{status.text}</Alert>}
       {!status && <>
         <Field label="Canal">
           <div style={{ display: 'flex', border: '0.5px solid #C0C0C0', borderRadius: 8, overflow: 'hidden', marginBottom: '1rem' }}>
-            {user.email && (
-              <button onClick={() => setChannel('email')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'email' ? '#185FA5' : 'transparent', color: channel === 'email' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>
-                📧 Email
-              </button>
-            )}
-            {user.phone && (
-              <button onClick={() => setChannel('sms')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'sms' ? '#185FA5' : 'transparent', color: channel === 'sms' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>
-                📱 SMS
-              </button>
-            )}
+            {user.email && <button onClick={() => setChannel('email')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'email' ? '#185FA5' : 'transparent', color: channel === 'email' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>📧 Email</button>}
+            {user.phone && <button onClick={() => setChannel('sms')} style={{ flex: 1, padding: 8, textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: channel === 'sms' ? '#185FA5' : 'transparent', color: channel === 'sms' ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>📱 SMS</button>}
           </div>
         </Field>
-        {channel === 'email' && (
-          <Field label="Sujet">
-            <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="ex: Informations importantes" />
-          </Field>
-        )}
+        {channel === 'email' && <Field label="Sujet"><Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="ex: Informations importantes" /></Field>}
         <Field label="Message">
           <Textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Écris ton message…" />
-          {channel === 'sms' && (
-            <div style={{ fontSize: 11, color: message.length > 160 ? '#A32D2D' : '#9E9E9E', marginTop: 4, textAlign: 'right' }}>
-              {message.length} / 160 caractères
-            </div>
-          )}
+          {channel === 'sms' && <div style={{ fontSize: 11, color: message.length > 160 ? '#A32D2D' : '#9E9E9E', marginTop: 4, textAlign: 'right' }}>{message.length} / 160 caractères</div>}
         </Field>
         {channel === 'sms' && <Alert variant="teal">📱 Les SMS sont simulés sans backend Twilio.</Alert>}
       </>}
-
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Fermer</Btn>
         {!status && <Btn variant="primary" disabled={sending} onClick={send}>{sending ? 'Envoi…' : 'Envoyer'}</Btn>}
