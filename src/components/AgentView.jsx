@@ -206,38 +206,163 @@ export default function AgentView({ user, onLogout }) {
 
   // ── QUESTIONS ──
   function renderQuestions() {
+    const [qView, setQView] = [window._qView || 'liste', v => { window._qView = v; rerender() }]
     const filtered = myQuestions.filter(q => q.text.toLowerCase().includes(search.questions.toLowerCase()))
+
+    // ── Vue récapitulatif : par élève ──
+    function renderRecap() {
+      return (
+        <div>
+          <div style={{ fontSize: 13, color: '#5E5E5E', marginBottom: '1rem', background: '#F0F0F0', padding: '10px 14px', borderRadius: 8 }}>
+            Récapitulatif des questions attribuées à chaque élève.
+          </div>
+          {myEleves.length === 0
+            ? <div style={{ textAlign: 'center', padding: '2rem', color: '#9E9E9E' }}>Aucun élève associé.</div>
+            : myEleves.map(e => {
+              const eleveQs = myQuestions.filter(q => !q.assignedTo?.length || q.assignedTo.includes(e.id))
+              return (
+                <div key={e.id} style={{ marginBottom: '1rem', border: '0.5px solid #E0E0E0', borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#F8F8F8', borderBottom: '0.5px solid #E0E0E0' }}>
+                    <Avatar name={e.name} role="eleve" style={{ width: 28, height: 28, fontSize: 11 }} />
+                    <span style={{ fontSize: 14, fontWeight: 500 }}>{e.name}</span>
+                    <Badge variant="blue" style={{ marginLeft: 'auto' }}>{eleveQs.length} question(s)</Badge>
+                  </div>
+                  {eleveQs.length === 0
+                    ? <div style={{ padding: '10px 14px', fontSize: 13, color: '#9E9E9E' }}>Aucune question attribuée.</div>
+                    : eleveQs.map((q, i) => (
+                      <div key={q.id} style={{ padding: '8px 14px', borderBottom: i < eleveQs.length - 1 ? '0.5px solid #F0F0F0' : 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, flex: 1 }}>{q.text}</span>
+                        <Badge variant={q.assignedTo?.length ? 'amber' : 'green'} style={{ fontSize: 11 }}>
+                          {q.assignedTo?.length ? 'Spécifique' : 'Tous'}
+                        </Badge>
+                      </div>
+                    ))}
+                </div>
+              )
+            })}
+        </div>
+      )
+    }
+
+    // ── Vue liste ──
+    function renderListe() {
+      return (
+        <div>
+          <SearchInput value={search.questions} onChange={v => setSearch(s => ({ ...s, questions: v }))} placeholder="Rechercher une question…" />
+          {filtered.length === 0
+            ? <div style={{ textAlign: 'center', padding: '2rem', color: '#9E9E9E' }}>Aucune question.</div>
+            : filtered.map(q => {
+              const assigned = q.assignedTo?.length > 0
+              const names = assigned ? q.assignedTo.map(id => users.find(x => x.id === id)?.name.split(' ')[0] || '?').join(', ') : null
+              return (
+                <div key={q.id} style={{ background: '#F8F8F8', borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, marginBottom: 6, lineHeight: 1.5 }}>{q.text}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        <Badge variant="gray">{q.type === 'oui_non' ? 'Oui / Non' : 'Réponse libre'}</Badge>
+                        {q.followup && <Badge variant="blue">Suivi si {q.followup.condition}</Badge>}
+                        {assigned ? <Badge variant="amber">→ {names}</Badge> : <Badge variant="green">Tous</Badge>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <Btn sm onClick={() => setModal({ type: 'edit_question', questionId: q.id })}>Modifier</Btn>
+                      <Btn sm variant="danger" onClick={() => { saveAllQuestions(getAllQuestions().filter(x => x.id !== q.id)); rerender() }}>Suppr.</Btn>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+        </div>
+      )
+    }
+
+    // ── Vue réattribution en masse ──
+    function renderMasse() {
+      return (
+        <div>
+          <div style={{ fontSize: 13, color: '#5E5E5E', marginBottom: '1rem', background: '#F0F0F0', padding: '10px 14px', borderRadius: 8 }}>
+            Pour chaque question, coche les élèves qui doivent la recevoir. Laisse tout décoché = attribué à tous.
+          </div>
+          {myQuestions.length === 0
+            ? <div style={{ textAlign: 'center', padding: '2rem', color: '#9E9E9E' }}>Aucune question.</div>
+            : myQuestions.map(q => {
+              const assignedTo = new Set(q.assignedTo || [])
+              const isAll = assignedTo.size === 0
+              return (
+                <div key={q.id} style={{ border: '0.5px solid #E0E0E0', borderRadius: 8, marginBottom: 10, overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 14px', background: '#F8F8F8', borderBottom: '0.5px solid #E0E0E0' }}>
+                    <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>{q.text}</div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <Btn sm variant={isAll ? 'primary' : 'default'} onClick={() => {
+                        const all = getAllQuestions()
+                        const idx = all.findIndex(x => x.id === q.id)
+                        if (idx > -1) { all[idx].assignedTo = []; saveAllQuestions(all); rerender() }
+                      }}>Tous</Btn>
+                      <Btn sm variant={!isAll ? 'primary' : 'default'} onClick={() => {
+                        // Si on passe en "spécifique", on coche tous les élèves par défaut
+                        const all = getAllQuestions()
+                        const idx = all.findIndex(x => x.id === q.id)
+                        if (idx > -1 && !all[idx].assignedTo?.length) {
+                          all[idx].assignedTo = myEleves.map(e => e.id)
+                          saveAllQuestions(all); rerender()
+                        }
+                      }}>Spécifiques</Btn>
+                    </div>
+                  </div>
+                  {!isAll && (
+                    <div style={{ padding: '8px 14px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {myEleves.map(e => {
+                        const checked = assignedTo.has(e.id)
+                        return (
+                          <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, background: checked ? '#E6F1FB' : '#F0F0F0', cursor: 'pointer', fontSize: 13 }}>
+                            <input type="checkbox" checked={checked} style={{ width: 'auto' }} onChange={() => {
+                              const all = getAllQuestions()
+                              const idx = all.findIndex(x => x.id === q.id)
+                              if (idx < 0) return
+                              const s = new Set(all[idx].assignedTo || [])
+                              s.has(e.id) ? s.delete(e.id) : s.add(e.id)
+                              all[idx].assignedTo = [...s]
+                              saveAllQuestions(all); rerender()
+                            }} />
+                            {e.name.split(' ')[0]}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+        </div>
+      )
+    }
+
     return (
       <div>
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 14, color: '#5E5E5E' }}>{myQuestions.length} question(s)</div>
           <Btn variant="primary" onClick={() => setModal({ type: 'edit_question', questionId: null })}>+ Ajouter</Btn>
         </div>
-        <SearchInput value={search.questions} onChange={v => setSearch(s => ({ ...s, questions: v }))} placeholder="Rechercher une question…" />
-        {filtered.length === 0
-          ? <div style={{ textAlign: 'center', padding: '2rem', color: '#9E9E9E' }}>Aucune question.</div>
-          : filtered.map(q => {
-            const assigned = q.assignedTo?.length > 0
-            const names = assigned ? q.assignedTo.map(id => users.find(x => x.id === id)?.name.split(' ')[0] || '?').join(', ') : null
-            return (
-              <div key={q.id} style={{ background: '#F8F8F8', borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 14, marginBottom: 6, lineHeight: 1.5 }}>{q.text}</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                      <Badge variant="gray">{q.type === 'oui_non' ? 'Oui / Non' : 'Réponse libre'}</Badge>
-                      {q.followup && <Badge variant="blue">Suivi si {q.followup.condition}</Badge>}
-                      {assigned ? <Badge variant="amber">→ {names}</Badge> : <Badge variant="green">Tous</Badge>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                    <Btn sm onClick={() => setModal({ type: 'edit_question', questionId: q.id })}>Modifier</Btn>
-                    <Btn sm variant="danger" onClick={() => { saveAllQuestions(getAllQuestions().filter(x => x.id !== q.id)); rerender() }}>Suppr.</Btn>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+
+        {/* Toggle de vue */}
+        <div style={{ display: 'flex', border: '0.5px solid #C0C0C0', borderRadius: 8, overflow: 'hidden', marginBottom: '1.5rem' }}>
+          {[
+            { key: 'liste', label: '📋 Liste' },
+            { key: 'recap', label: '👤 Par élève' },
+            { key: 'masse', label: '⚡ Réattribuer' },
+          ].map(v => (
+            <button key={v.key} onClick={() => setQView(v.key)}
+              style={{ flex: 1, padding: '8px', textAlign: 'center', fontSize: 13, fontWeight: 500, cursor: 'pointer', border: 'none', background: qView === v.key ? '#185FA5' : 'transparent', color: qView === v.key ? '#E6F1FB' : '#5E5E5E', transition: 'background .15s' }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {qView === 'liste' && renderListe()}
+        {qView === 'recap' && renderRecap()}
+        {qView === 'masse' && renderMasse()}
       </div>
     )
   }
