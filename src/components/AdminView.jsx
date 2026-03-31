@@ -133,6 +133,7 @@ export default function AdminView({ user, onLogout }) {
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
           <div style={{ fontSize: 14, color: '#5E5E5E' }}>{allQs.length} question(s)</div>
+          <Btn variant="primary" onClick={() => setModal({ type: 'add_question' })}>+ Ajouter une question</Btn>
         </div>
 
         {/* Filtres */}
@@ -212,6 +213,7 @@ export default function AdminView({ user, onLogout }) {
     if (modal.type === 'create') return <CreateUserModal role={modal.role} onClose={closeModal} onCreated={() => { rerender(); closeModal() }} />
     if (modal.type === 'edit') return <EditUserModal userId={modal.userId} onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
     if (modal.type === 'edit_question') return <EditQuestionModal questionId={modal.questionId} onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
+    if (modal.type === 'add_question') return <AddQuestionModal onClose={closeModal} onSaved={() => { rerender(); closeModal() }} />
     if (modal.type === 'delete') {
       const u = getUsers().find(x => x.id === modal.userId)
       return (
@@ -426,6 +428,73 @@ function EditQuestionModal({ questionId, onClose, onSaved }) {
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
         <Btn onClick={onClose}>Annuler</Btn>
         <Btn variant="primary" onClick={save}>Enregistrer</Btn>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Modal : Ajouter une question (admin) ──
+function AddQuestionModal({ onClose, onSaved }) {
+  const users = getUsers()
+  const agents = users.filter(u => u.role === 'agent')
+  const [agentId, setAgentId] = useState(agents[0]?.id || '')
+  const [text, setText] = useState('')
+  const [type, setType] = useState('oui_non')
+  const [assignAll, setAssignAll] = useState(true)
+  const [assignedTo, setAssignedTo] = useState(new Set())
+
+  const agentEleves = users.filter(u => u.role === 'eleve' && u.agentId === agentId)
+  const toggleEleve = id => setAssignedTo(prev => {
+    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
+  })
+
+  function save() {
+    if (!text.trim()) return
+    if (!agentId) return
+    const assigned = assignAll ? [] : [...assignedTo]
+    const all = getAllQuestions()
+    all.push({ id: uid(), agentId, text, type, followup: null, assignedTo: assigned })
+    saveAllQuestions(all); onSaved()
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ fontSize: 16, fontWeight: 500, marginBottom: '1.5rem' }}>Nouvelle question</div>
+      <Field label="Agent propriétaire">
+        <Select value={agentId} onChange={e => { setAgentId(e.target.value); setAssignedTo(new Set()) }}>
+          <option value="">Choisir un agent…</option>
+          {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </Select>
+      </Field>
+      <Field label="Texte de la question">
+        <Textarea value={text} onChange={e => setText(e.target.value)} placeholder="Écris ta question…" />
+      </Field>
+      <Field label="Type de réponse">
+        <Select value={type} onChange={e => setType(e.target.value)}>
+          <option value="oui_non">Oui / Non</option>
+          <option value="libre">Réponse libre</option>
+        </Select>
+      </Field>
+      <Field label="Attribuer à">
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <Btn sm variant={assignAll ? 'primary' : 'default'} onClick={() => setAssignAll(true)}>Tous les élèves</Btn>
+          <Btn sm variant={!assignAll ? 'primary' : 'default'} onClick={() => setAssignAll(false)}>Spécifiques</Btn>
+        </div>
+        {!assignAll && (
+          agentEleves.length === 0
+            ? <div style={{ fontSize: 13, color: '#9E9E9E' }}>Aucun élève associé à cet agent.</div>
+            : agentEleves.map(e => (
+              <label key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, cursor: 'pointer' }}>
+                <input type="checkbox" checked={assignedTo.has(e.id)} onChange={() => toggleEleve(e.id)} style={{ width: 'auto' }} />
+                <Avatar name={e.name} role="eleve" style={{ width: 26, height: 26, fontSize: 11 }} />
+                <span style={{ fontSize: 14 }}>{e.name}</span>
+              </label>
+            ))
+        )}
+      </Field>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <Btn onClick={onClose}>Annuler</Btn>
+        <Btn variant="primary" onClick={save}>Ajouter</Btn>
       </div>
     </Modal>
   )
